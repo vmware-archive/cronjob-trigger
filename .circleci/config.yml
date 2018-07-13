@@ -15,7 +15,7 @@ defaults: &defaults
     TEST_DEBUG: "1"
     GKE_VERSION: 1.9.7-gke.3
     MINIKUBE_VERSION: v0.25.2
-    MANIFESTS: http
+    MANIFESTS: cronjob
 exports: &exports
   # It is not possible to resolve env vars in the environment section:
   # https://discuss.circleci.com/t/using-environment-variables-in-config-yml-not-working/14237
