@@ -31,15 +31,6 @@ binary:
 binary-cross:
 	./script/binary-cli
 
-
-%.yaml: %.jsonnet
-	$(KUBECFG) show -o yaml $< > $@.tmp
-	mv $@.tmp $@
-
-all-yaml: cronjob.yaml
-
-cronjob.yaml: cronjob.jsonnet
-
 cronjob-controller-build:
 	./script/binary-controller -os=$(OS) -arch=$(ARCH) cronjob-controller github.com/kubeless/cronjob-trigger/cmd/cronjob-trigger-controller
 
