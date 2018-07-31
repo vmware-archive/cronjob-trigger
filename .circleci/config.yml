@@ -101,8 +101,6 @@ jobs:
       - run: make VERSION=${CONTROLLER_TAG} binary
       - run: make test
       - run: make validation
-      - run: |
-          done
       - persist_to_workspace:
           root: /home/circleci/.go_workspace
           paths: 
