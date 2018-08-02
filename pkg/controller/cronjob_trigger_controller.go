@@ -22,12 +22,10 @@ import (
 
 	cronjobTriggerAPi "github.com/kubeless/cronjob-trigger/pkg/apis/kubeless/v1beta1"
 	"github.com/kubeless/cronjob-trigger/pkg/client/clientset/versioned"
-	"github.com/kubeless/cronjob-trigger/pkg/client/informers/externalversions"
 	cronjobInformers "github.com/kubeless/cronjob-trigger/pkg/client/informers/externalversions/kubeless/v1beta1"
 	cronjobutils "github.com/kubeless/cronjob-trigger/pkg/utils"
 	kubelessApi "github.com/kubeless/kubeless/pkg/apis/kubeless/v1beta1"
 	kubelessversioned "github.com/kubeless/kubeless/pkg/client/clientset/versioned"
-	kubelessexternalversion "github.com/kubeless/kubeless/pkg/client/informers/externalversions"
 	kubelessInformers "github.com/kubeless/kubeless/pkg/client/informers/externalversions/kubeless/v1beta1"
 	kubelessutils "github.com/kubeless/kubeless/pkg/utils"
 	"github.com/sirupsen/logrus"
@@ -53,10 +51,11 @@ type CronJobTriggerController struct {
 	logger           *logrus.Entry
 	clientset        kubernetes.Interface
 	config           *corev1.ConfigMap
-	kubelessclient   versioned.Interface
+	cronjobclient    versioned.Interface
+	kubelessclient   kubelessversioned.Interface
 	queue            workqueue.RateLimitingInterface
-	cronJobInformer  cronjobInformers.CronJobTriggerInformer
-	functionInformer kubelessInformers.FunctionInformer
+	cronJobInformer  cache.SharedIndexInformer
+	functionInformer cache.SharedIndexInformer
 	imagePullSecrets []corev1.LocalObjectReference
 }
 
@@ -71,13 +70,16 @@ type CronJobTriggerConfig struct {
 func NewCronJobTriggerController(cfg CronJobTriggerConfig) *CronJobTriggerController {
 	queue := workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
 
-	cronjobTriggerInformers := externalversions.NewSharedInformerFactory(cfg.TriggerClient, 0)
-	cronJobInformer := cronjobTriggerInformers.Kubeless().V1beta1().CronJobTriggers()
+	config, err := kubelessutils.GetKubelessConfig(cfg.KubeCli, kubelessutils.GetAPIExtensionsClientInCluster())
+	if err != nil {
+		logrus.Fatalf("Unable to read the configmap: %s", err)
+	}
 
-	kubelessSharedInformers := kubelessexternalversion.NewSharedInformerFactory(cfg.KubelessClient, 0)
-	functionInformer := kubelessSharedInformers.Kubeless().V1beta1().Functions()
+	cronJobInformer := cronjobInformers.NewCronJobTriggerInformer(cfg.TriggerClient, config.Data["functions-namespace"], 0, cache.Indexers{})
 
-	cronJobInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+	functionInformer := kubelessInformers.NewFunctionInformer(cfg.KubelessClient, config.Data["functions-namespace"], 0, cache.Indexers{})
+
+	cronJobInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			key, err := cache.MetaNamespaceKeyFunc(obj)
 			if err == nil {
@@ -101,15 +103,11 @@ func NewCronJobTriggerController(cfg CronJobTriggerConfig) *CronJobTriggerContro
 			}
 		},
 	})
-	apiExtensionsClientset := cronjobutils.GetAPIExtensionsClientInCluster()
-	config, err := kubelessutils.GetKubelessConfig(cfg.KubeCli, apiExtensionsClientset)
-	if err != nil {
-		logrus.Fatalf("Unable to read the configmap: %s", err)
-	}
 	controller := CronJobTriggerController{
 		logger:           logrus.WithField("controller", "cronjob-trigger-controller"),
 		clientset:        cfg.KubeCli,
-		kubelessclient:   cfg.TriggerClient,
+		kubelessclient:   cfg.KubelessClient,
+		cronjobclient:    cfg.TriggerClient,
 		config:           config,
 		cronJobInformer:  cronJobInformer,
 		functionInformer: functionInformer,
@@ -117,7 +115,7 @@ func NewCronJobTriggerController(cfg CronJobTriggerConfig) *CronJobTriggerContro
 		imagePullSecrets: cronjobutils.GetSecretsAsLocalObjectReference(config.Data["provision-image-secret"], config.Data["builder-image-secret"]),
 	}
 
-	functionInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+	functionInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			controller.functionAddedDeletedUpdated(obj, false)
 		},
@@ -139,8 +137,8 @@ func (c *CronJobTriggerController) Run(stopCh <-chan struct{}) {
 
 	c.logger.Info("Starting Cron Job Trigger controller")
 
-	go c.cronJobInformer.Informer().Run(stopCh)
-	go c.functionInformer.Informer().Run(stopCh)
+	go c.cronJobInformer.Run(stopCh)
+	go c.functionInformer.Run(stopCh)
 
 	if !c.WaitForCacheSync(stopCh) {
 		return
@@ -153,7 +151,7 @@ func (c *CronJobTriggerController) Run(stopCh <-chan struct{}) {
 
 // WaitForCacheSync is required for caches to be synced
 func (c *CronJobTriggerController) WaitForCacheSync(stopCh <-chan struct{}) bool {
-	if !cache.WaitForCacheSync(stopCh, c.cronJobInformer.Informer().HasSynced, c.functionInformer.Informer().HasSynced) {
+	if !cache.WaitForCacheSync(stopCh, c.cronJobInformer.HasSynced, c.functionInformer.HasSynced) {
 		utilruntime.HandleError(fmt.Errorf("Timed out waiting for caches required for Cronjob triggers controller to sync;"))
 		return false
 	}
@@ -199,7 +197,7 @@ func (c *CronJobTriggerController) syncCronJobTrigger(key string) error {
 		return err
 	}
 
-	obj, exists, err := c.cronJobInformer.Informer().GetIndexer().GetByKey(key)
+	obj, exists, err := c.cronJobInformer.GetIndexer().GetByKey(key)
 	if err != nil {
 		return fmt.Errorf("Error fetching object with key %s from store: %v", key, err)
 	}
@@ -252,7 +250,7 @@ func (c *CronJobTriggerController) syncCronJobTrigger(key string) error {
 		return err
 	}
 
-	functionObj, err := c.functionInformer.Lister().Functions(ns).Get(cronJobtriggerObj.Spec.FunctionName)
+	functionObj, err := c.kubelessclient.KubelessV1beta1().Functions(ns).Get(cronJobtriggerObj.Spec.FunctionName, metav1.GetOptions{})
 	if err != nil {
 		c.logger.Errorf("Unable to find the function %s in the namespace %s. Received %s: ", cronJobtriggerObj.Spec.FunctionName, ns, err)
 		return err
@@ -286,13 +284,13 @@ func (c *CronJobTriggerController) functionAddedDeletedUpdated(obj interface{}, 
 	c.logger.Infof("Processing update to function object %s Namespace: %s", functionObj.Name, functionObj.Namespace)
 	if deleted {
 		c.logger.Infof("Function %s deleted. Removing associated cronjob trigger", functionObj.Name)
-		cjtList, err := c.kubelessclient.KubelessV1beta1().CronJobTriggers(functionObj.Namespace).List(metav1.ListOptions{})
+		cjtList, err := c.cronjobclient.KubelessV1beta1().CronJobTriggers(functionObj.Namespace).List(metav1.ListOptions{})
 		if err != nil {
 			return err
 		}
 		for _, cjt := range cjtList.Items {
 			if cjt.Spec.FunctionName == functionObj.Name {
-				err = c.kubelessclient.KubelessV1beta1().CronJobTriggers(functionObj.Namespace).Delete(cjt.Name, &metav1.DeleteOptions{})
+				err = c.cronjobclient.KubelessV1beta1().CronJobTriggers(functionObj.Namespace).Delete(cjt.Name, &metav1.DeleteOptions{})
 				if err != nil && !k8sErrors.IsNotFound(err) {
 					c.logger.Errorf("Failed to delete cronjobtrigger created for the function %s in namespace %s, Error: %s", functionObj.ObjectMeta.Name, functionObj.ObjectMeta.Namespace, err)
 					return err
@@ -316,7 +314,7 @@ func (c *CronJobTriggerController) cronJobTriggerObjHasFinalizer(triggerObj *cro
 func (c *CronJobTriggerController) cronJobTriggerObjAddFinalizer(triggercObj *cronjobTriggerAPi.CronJobTrigger) error {
 	triggercObjClone := triggercObj.DeepCopy()
 	triggercObjClone.ObjectMeta.Finalizers = append(triggercObjClone.ObjectMeta.Finalizers, cronJobTriggerFinalizer)
-	return cronjobutils.UpdateCronJobCustomResource(c.kubelessclient, triggercObjClone)
+	return cronjobutils.UpdateCronJobCustomResource(c.cronjobclient, triggercObjClone)
 }
 
 func (c *CronJobTriggerController) cronJobTriggerObjRemoveFinalizer(triggercObj *cronjobTriggerAPi.CronJobTrigger) error {
@@ -332,7 +330,7 @@ func (c *CronJobTriggerController) cronJobTriggerObjRemoveFinalizer(triggercObj 
 		newSlice = nil
 	}
 	triggerObjClone.ObjectMeta.Finalizers = newSlice
-	err := cronjobutils.UpdateCronJobCustomResource(c.kubelessclient, triggerObjClone)
+	err := cronjobutils.UpdateCronJobCustomResource(c.cronjobclient, triggerObjClone)
 	if err != nil {
 		return err
 	}
