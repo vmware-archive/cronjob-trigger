@@ -35,9 +35,9 @@ func TestFunctionAddedUpdated(t *testing.T) {
 	clientset := fake.NewSimpleClientset(&cronjob)
 
 	controller := CronJobTriggerController{
-		clientset:      clientset,
-		kubelessclient: triggerClientset,
-		logger:         logrus.WithField("controller", "cronjob-trigger-controller"),
+		clientset:     clientset,
+		cronjobclient: triggerClientset,
+		logger:        logrus.WithField("controller", "cronjob-trigger-controller"),
 	}
 
 	// no-op for when the function is not deleted
@@ -46,7 +46,7 @@ func TestFunctionAddedUpdated(t *testing.T) {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	list, err := controller.kubelessclient.KubelessV1beta1().CronJobTriggers("myns").List(metav1.ListOptions{})
+	list, err := controller.cronjobclient.KubelessV1beta1().CronJobTriggers("myns").List(metav1.ListOptions{})
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -83,9 +83,9 @@ func TestFunctionDeleted(t *testing.T) {
 	clientset := fake.NewSimpleClientset(&cronjob)
 
 	controller := CronJobTriggerController{
-		clientset:      clientset,
-		kubelessclient: triggerClientset,
-		logger:         logrus.WithField("controller", "cronjob-trigger-controller"),
+		clientset:     clientset,
+		cronjobclient: triggerClientset,
+		logger:        logrus.WithField("controller", "cronjob-trigger-controller"),
 	}
 
 	// no-op for when the function is not deleted
@@ -94,7 +94,7 @@ func TestFunctionDeleted(t *testing.T) {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	list, err := controller.kubelessclient.KubelessV1beta1().CronJobTriggers("myns").List(metav1.ListOptions{})
+	list, err := controller.cronjobclient.KubelessV1beta1().CronJobTriggers("myns").List(metav1.ListOptions{})
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
