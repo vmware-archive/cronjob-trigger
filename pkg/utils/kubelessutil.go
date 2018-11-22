@@ -57,6 +57,17 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, s
 	headersString = headersString + " -H \"event-time: " + timestamp.String() + "\""
 	headersString = headersString + " -H \"event-type: application/json\""
 	headersString = headersString + " -H \"event-namespace: cronjobtrigger.kubeless.io\""
+
+	resource = {
+		v1.ResourceMemory: "32Ki",
+		v1.ResourceCPU:    "1m",
+	}
+
+	resources = v1.ResourceRequirements{
+		Limits:   resource,
+		Requests: resource,
+	}
+
 	job := &batchv1beta1.CronJob{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            jobName,
@@ -76,9 +87,10 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, s
 							ImagePullSecrets: reqImagePullSecret,
 							Containers: []v1.Container{
 								{
-									Image: reqImage,
-									Name:  "trigger",
-									Args:  []string{"curl", "-Lv", headersString, fmt.Sprintf("http://%s.%s.svc.cluster.local:8080", funcObj.ObjectMeta.Name, funcObj.ObjectMeta.Namespace)},
+									Image:      reqImage,
+									Name:       "trigger",
+									Args:       []string{"curl", "-Lv", headersString, fmt.Sprintf("http://%s.%s.svc.cluster.local:8080", funcObj.ObjectMeta.Name, funcObj.ObjectMeta.Namespace)},
+									Resources:  resources,
 								},
 							},
 							RestartPolicy: v1.RestartPolicyNever,
