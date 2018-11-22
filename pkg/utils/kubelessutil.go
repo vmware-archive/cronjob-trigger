@@ -28,6 +28,7 @@ import (
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // EnsureCronJob creates/updates a function cron job
@@ -58,16 +59,6 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, s
 	headersString = headersString + " -H \"event-type: application/json\""
 	headersString = headersString + " -H \"event-namespace: cronjobtrigger.kubeless.io\""
 
-	resource = {
-		v1.ResourceMemory: "32Ki",
-		v1.ResourceCPU:    "1m",
-	}
-
-	resources = v1.ResourceRequirements{
-		Limits:   resource,
-		Requests: resource,
-	}
-
 	job := &batchv1beta1.CronJob{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            jobName,
@@ -90,7 +81,16 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, s
 									Image:      reqImage,
 									Name:       "trigger",
 									Args:       []string{"curl", "-Lv", headersString, fmt.Sprintf("http://%s.%s.svc.cluster.local:8080", funcObj.ObjectMeta.Name, funcObj.ObjectMeta.Namespace)},
-									Resources:  resources,
+									Resources: v1.ResourceRequirements{
+										Limits: v1.ResourceList{
+											v1.ResourceMemory: resource.MustParse("32Ki"),
+											v1.ResourceCPU: resource.MustParse("1m"),
+										},
+										Requests: v1.ResourceList{
+											v1.ResourceMemory: resource.MustParse("32Ki"),
+											v1.ResourceCPU: resource.MustParse("1m"),
+										},
+									},
 								},
 							},
 							RestartPolicy: v1.RestartPolicyNever,
