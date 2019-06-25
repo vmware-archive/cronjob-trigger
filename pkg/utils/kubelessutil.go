@@ -83,7 +83,7 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, s
 									Args:  []string{"curl", "-Lv", headersString, fmt.Sprintf("http://%s.%s.svc.cluster.local:8080", funcObj.ObjectMeta.Name, funcObj.ObjectMeta.Namespace)},
 									Resources: v1.ResourceRequirements{
 										Limits: v1.ResourceList{
-											v1.ResourceMemory: resource.MustParse("4Mi"),
+											v1.ResourceMemory: resource.MustParse("8Mi"),
 											v1.ResourceCPU:    resource.MustParse("1m"),
 										},
 										Requests: v1.ResourceList{
