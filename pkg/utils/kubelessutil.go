@@ -24,7 +24,7 @@ import (
 	kubelessApi "github.com/kubeless/kubeless/pkg/apis/kubeless/v1beta1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -83,12 +83,12 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, s
 									Args:  []string{"curl", "-Lv", headersString, fmt.Sprintf("http://%s.%s.svc.cluster.local:8080", funcObj.ObjectMeta.Name, funcObj.ObjectMeta.Namespace)},
 									Resources: v1.ResourceRequirements{
 										Limits: v1.ResourceList{
-											v1.ResourceMemory: resource.MustParse("8Mi"),
-											v1.ResourceCPU:    resource.MustParse("1m"),
+											v1.ResourceMemory: resource.MustParse("64Mi"),
+											v1.ResourceCPU:    resource.MustParse("100m"),
 										},
 										Requests: v1.ResourceList{
-											v1.ResourceMemory: resource.MustParse("4Mi"),
-											v1.ResourceCPU:    resource.MustParse("1m"),
+											v1.ResourceMemory: resource.MustParse("16Mi"),
+											v1.ResourceCPU:    resource.MustParse("10m"),
 										},
 									},
 								},
