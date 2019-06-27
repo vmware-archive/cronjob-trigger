@@ -9,7 +9,7 @@ defaults: &defaults
   working_directory: /home/circleci/.go_workspace/src/github.com/kubeless/cronjob-trigger
   environment:
     GOPATH: /home/circleci/.go_workspace
-    CRONJOB_CONTROLLER_IMAGE_NAME: bitnami/cronjob-trigger-controller
+    CRONJOB_CONTROLLER_IMAGE_NAME: kubeless/cronjob-trigger-controller
     CGO_ENABLED: "0"
     TEST_DEBUG: "1"
     MINIKUBE_VERSION: v1.2.0
