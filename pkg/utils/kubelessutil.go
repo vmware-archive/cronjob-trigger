@@ -19,7 +19,6 @@ package utils
 import (
 	"fmt"
 	"strconv"
-	"time"
 
 	kubelessApi "github.com/kubeless/kubeless/pkg/apis/kubeless/v1beta1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -48,16 +47,15 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, s
 	}
 	activeDeadlineSeconds := int64(timeout)
 	jobName := fmt.Sprintf("trigger-%s", funcObj.ObjectMeta.Name)
-	var headersString = ""
-	timestamp := time.Now().UTC()
 	eventID, err := GetRandString(11)
 	if err != nil {
 		return fmt.Errorf("Failed to create a event-ID %v", err)
 	}
-	headersString = headersString + " -H \"event-id: " + eventID + "\""
-	headersString = headersString + " -H \"event-time: " + timestamp.String() + "\""
-	headersString = headersString + " -H \"event-type: application/json\""
-	headersString = headersString + " -H \"event-namespace: cronjobtrigger.kubeless.io\""
+
+	eventIdHeaderProp := "event-id: " + eventID
+	eventTimeHeaderProp := "event-time: $(date --rfc-3339=seconds --utc)"
+	eventTypeHeaderProp := "event-type: application/json"
+	eventNamespaceHeaderProp := "event-namespace: cronjobtrigger.kubeless.io"
 
 	job := &batchv1beta1.CronJob{
 		ObjectMeta: metav1.ObjectMeta{
@@ -80,7 +78,23 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, s
 								{
 									Image: reqImage,
 									Name:  "trigger",
-									Args:  []string{"curl", "-Lv", headersString, fmt.Sprintf("http://%s.%s.svc.cluster.local:8080", funcObj.ObjectMeta.Name, funcObj.ObjectMeta.Namespace)},
+									Args:  []string{
+										"curl",
+										"-Lv",
+										"-H",
+										eventIdHeaderProp,
+										"-H",
+										eventTimeHeaderProp,
+										"-H",
+										eventTypeHeaderProp,
+										"-H",
+										eventNamespaceHeaderProp,
+										fmt.Sprintf(
+											"http://%s.%s.svc.cluster.local:8080",
+											funcObj.ObjectMeta.Name,
+											funcObj.ObjectMeta.Namespace,
+										),
+									},
 									Resources: v1.ResourceRequirements{
 										Limits: v1.ResourceList{
 											v1.ResourceMemory: resource.MustParse("64Mi"),
