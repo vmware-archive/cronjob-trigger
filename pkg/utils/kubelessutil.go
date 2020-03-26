@@ -47,15 +47,15 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, s
 	}
 	activeDeadlineSeconds := int64(timeout)
 	jobName := fmt.Sprintf("trigger-%s", funcObj.ObjectMeta.Name)
-	eventID, err := GetRandString(11)
-	if err != nil {
-		return fmt.Errorf("Failed to create a event-ID %v", err)
-	}
+	functionEndpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8080", funcObj.ObjectMeta.Name, funcObj.ObjectMeta.Namespace)
 
-	eventIdHeaderProp := "event-id: " + eventID
-	eventTimeHeaderProp := "event-time: $(date --rfc-3339=seconds --utc)"
-	eventTypeHeaderProp := "event-type: application/json"
-	eventNamespaceHeaderProp := "event-namespace: cronjobtrigger.kubeless.io"
+	eventId := "\"event-id: $(JOB_NAME)\""
+	eventTime := "\"event-time: $(date --rfc-3339=seconds --utc)\""
+	eventType := "\"event-type: application/json\""
+	eventNamespace := "\"cronjobtrigger.kubeless.io\""
+	commandTemplate := "curl -Lv -H %s -H %s -H %s -H %s %s"
+
+	command := fmt.Sprintf(commandTemplate, eventId, eventTime, eventType, eventNamespace, functionEndpoint)
 
 	job := &batchv1beta1.CronJob{
 		ObjectMeta: metav1.ObjectMeta{
@@ -78,22 +78,22 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, s
 								{
 									Image: reqImage,
 									Name:  "trigger",
+									Env: []v1.EnvVar{
+										{
+											Name: "JOB_NAME",
+											ValueFrom: &v1.EnvVarSource{
+												FieldRef: &v1.ObjectFieldSelector{
+													FieldPath: "metadata.name",
+												},
+											},
+										},
+									},
+									Command: []string{
+										"/bin/sh",
+										"-c",
+									},
 									Args:  []string{
-										"curl",
-										"-Lv",
-										"-H",
-										eventIdHeaderProp,
-										"-H",
-										eventTimeHeaderProp,
-										"-H",
-										eventTypeHeaderProp,
-										"-H",
-										eventNamespaceHeaderProp,
-										fmt.Sprintf(
-											"http://%s.%s.svc.cluster.local:8080",
-											funcObj.ObjectMeta.Name,
-											funcObj.ObjectMeta.Namespace,
-										),
+										command,
 									},
 									Resources: v1.ResourceRequirements{
 										Limits: v1.ResourceList{
@@ -115,7 +115,7 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, s
 		},
 	}
 
-	_, err = client.BatchV1beta1().CronJobs(funcObj.ObjectMeta.Namespace).Create(job)
+	_, err := client.BatchV1beta1().CronJobs(funcObj.ObjectMeta.Namespace).Create(job)
 	if err != nil && k8sErrors.IsAlreadyExists(err) {
 		newCronJob := &batchv1beta1.CronJob{}
 		newCronJob, err = client.BatchV1beta1().CronJobs(funcObj.ObjectMeta.Namespace).Get(jobName, metav1.GetOptions{})
