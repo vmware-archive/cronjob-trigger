@@ -19,8 +19,10 @@ package utils
 import (
 	"fmt"
 	"strconv"
+	"encoding/json"
 
 	kubelessApi "github.com/kubeless/kubeless/pkg/apis/kubeless/v1beta1"
+	cronjobTriggerApi "github.com/kubeless/cronjob-trigger/pkg/apis/kubeless/v1beta1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	v1 "k8s.io/api/core/v1"
@@ -31,7 +33,7 @@ import (
 )
 
 // EnsureCronJob creates/updates a function cron job
-func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, schedule, reqImage string, or []metav1.OwnerReference, reqImagePullSecret []v1.LocalObjectReference) error {
+func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, cronjobTriggerObj *cronjobTriggerApi.CronJobTrigger, reqImage string, or []metav1.OwnerReference, reqImagePullSecret []v1.LocalObjectReference) error {
 	var maxSucccessfulHist, maxFailedHist int32
 	maxSucccessfulHist = 3
 	maxFailedHist = 1
@@ -45,6 +47,15 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, s
 	} else {
 		timeout, _ = strconv.Atoi(defaultTimeout)
 	}
+
+	schedule := cronjobTriggerObj.Spec.Schedule
+	rawPayload, err := json.Marshal(cronjobTriggerObj.Spec.Payload)
+	payload := string(rawPayload)
+
+	if err != nil {
+		return fmt.Errorf("Found an error during JSON parsing on your payload: %s", err)
+	}
+
 	activeDeadlineSeconds := int64(timeout)
 	jobName := fmt.Sprintf("trigger-%s", funcObj.ObjectMeta.Name)
 	functionEndpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8080", funcObj.ObjectMeta.Name, funcObj.ObjectMeta.Namespace)
@@ -53,9 +64,13 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, s
 	eventTime := "\"event-time: $(date --rfc-3339=seconds --utc)\""
 	eventType := "\"event-type: application/json\""
 	eventNamespace := "\"event-namespace: cronjobtrigger.kubeless.io\""
-	commandTemplate := "curl -Lv -H %s -H %s -H %s -H %s %s"
+	headersTemplate := "-H %s -H %s -H %s -H %s"
+	headers := fmt.Sprintf(headersTemplate, eventId, eventTime, eventType, eventNamespace)
 
-	command := fmt.Sprintf(commandTemplate, eventId, eventTime, eventType, eventNamespace, functionEndpoint)
+	data := map[bool]string{true: fmt.Sprintf("-d %s ", payload), false: ""}[payload != "null"]
+
+	commandTemplate := "curl -Lv %s %s%s"
+	command := fmt.Sprintf(commandTemplate, headers, data, functionEndpoint)
 
 	job := &batchv1beta1.CronJob{
 		ObjectMeta: metav1.ObjectMeta{
@@ -115,7 +130,7 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, s
 		},
 	}
 
-	_, err := client.BatchV1beta1().CronJobs(funcObj.ObjectMeta.Namespace).Create(job)
+	_, err = client.BatchV1beta1().CronJobs(funcObj.ObjectMeta.Namespace).Create(job)
 	if err != nil && k8sErrors.IsAlreadyExists(err) {
 		newCronJob := &batchv1beta1.CronJob{}
 		newCronJob, err = client.BatchV1beta1().CronJobs(funcObj.ObjectMeta.Namespace).Get(jobName, metav1.GetOptions{})
