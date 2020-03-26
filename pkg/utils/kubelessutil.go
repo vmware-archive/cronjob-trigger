@@ -17,12 +17,12 @@ limitations under the License.
 package utils
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
-	"encoding/json"
 
-	kubelessApi "github.com/kubeless/kubeless/pkg/apis/kubeless/v1beta1"
 	cronjobTriggerApi "github.com/kubeless/cronjob-trigger/pkg/apis/kubeless/v1beta1"
+	kubelessApi "github.com/kubeless/kubeless/pkg/apis/kubeless/v1beta1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	v1 "k8s.io/api/core/v1"

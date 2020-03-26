@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	kubelessApi "github.com/kubeless/kubeless/pkg/apis/kubeless/v1beta1"
 	cronjobTriggerApi "github.com/kubeless/cronjob-trigger/pkg/apis/kubeless/v1beta1"
+	kubelessApi "github.com/kubeless/kubeless/pkg/apis/kubeless/v1beta1"
 
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	"k8s.io/api/core/v1"
