@@ -49,7 +49,7 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, s
 	jobName := fmt.Sprintf("trigger-%s", funcObj.ObjectMeta.Name)
 	functionEndpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8080", funcObj.ObjectMeta.Name, funcObj.ObjectMeta.Namespace)
 
-	eventId := "\"event-id: $(JOB_NAME)\""
+	eventId := "\"event-id: $(POD_UID)\""
 	eventTime := "\"event-time: $(date --rfc-3339=seconds --utc)\""
 	eventType := "\"event-type: application/json\""
 	eventNamespace := "\"cronjobtrigger.kubeless.io\""
@@ -80,10 +80,10 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, s
 									Name:  "trigger",
 									Env: []v1.EnvVar{
 										{
-											Name: "JOB_NAME",
+											Name: "POD_UID",
 											ValueFrom: &v1.EnvVarSource{
 												FieldRef: &v1.ObjectFieldSelector{
-													FieldPath: "metadata.name",
+													FieldPath: "metadata.uid",
 												},
 											},
 										},
