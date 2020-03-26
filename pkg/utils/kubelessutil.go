@@ -92,7 +92,7 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, s
 										"/bin/sh",
 										"-c",
 									},
-									Args:  []string{
+									Args: []string{
 										command,
 									},
 									Resources: v1.ResourceRequirements{
