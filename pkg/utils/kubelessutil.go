@@ -52,7 +52,7 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, s
 	eventId := "\"event-id: $(POD_UID)\""
 	eventTime := "\"event-time: $(date --rfc-3339=seconds --utc)\""
 	eventType := "\"event-type: application/json\""
-	eventNamespace := "\"cronjobtrigger.kubeless.io\""
+	eventNamespace := "\"event-namespace: cronjobtrigger.kubeless.io\""
 	commandTemplate := "curl -Lv -H %s -H %s -H %s -H %s %s"
 
 	command := fmt.Sprintf(commandTemplate, eventId, eventTime, eventType, eventNamespace, functionEndpoint)

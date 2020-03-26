@@ -64,14 +64,23 @@ func TestEnsureCronJob(t *testing.T) {
 	if *cronJob.Spec.JobTemplate.Spec.ActiveDeadlineSeconds != int64(120) {
 		t.Errorf("Unexpected ActiveDeadlineSeconds: %d", *cronJob.Spec.JobTemplate.Spec.ActiveDeadlineSeconds)
 	}
-	expectedCommand := []string{"curl", "-Lv", fmt.Sprintf("http://%s.%s.svc.cluster.local:8080", f1Name, ns)}
+
+	expectedId := "\"event-id: $(POD_UID)\""
+	expectedTime := "\"event-time: $(date --rfc-3339=seconds --utc)\""
+	expectedType := "\"event-type: application/json\""
+	expectedNamespace := "\"event-namespace: cronjobtrigger.kubeless.io\""
+
+	expectedHeaders := fmt.Sprintf("-H %s -H %s -H %s -H %s", expectedId, expectedTime, expectedType, expectedNamespace)
+	expectedEndpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8080", f1Name, ns)
+	expectedCommand := fmt.Sprintf("curl -Lv %s %s", expectedHeaders, expectedEndpoint)
+
 	runtimeContainer := cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
 	if runtimeContainer.Image != "unzip" {
 		t.Errorf("Unexpected image %s", runtimeContainer.Image)
 	}
 	args := runtimeContainer.Args
 	// skip event headers data (i.e  -H "event-id: cronjob-controller-2018-03-05T05:55:41.990784027Z" etc)
-	foundCommand := []string{args[0], args[1], args[len(args)-1]}
+	foundCommand := args[0]
 	if !reflect.DeepEqual(foundCommand, expectedCommand) {
 		t.Errorf("Unexpected command %s expexted %s", foundCommand, expectedCommand)
 	}
