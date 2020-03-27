@@ -72,12 +72,13 @@ func TestEnsureCronJob(t *testing.T) {
 		t.Errorf("Unexpected ActiveDeadlineSeconds: %d", *cronJob.Spec.JobTemplate.Spec.ActiveDeadlineSeconds)
 	}
 
-	expectedId := "\"event-id: $(POD_UID)\""
-	expectedTime := "\"event-time: $(date --rfc-3339=seconds --utc)\""
-	expectedType := "\"event-type: application/json\""
-	expectedNamespace := "\"event-namespace: cronjobtrigger.kubeless.io\""
+	expectedId := "\"Event-Id: $(POD_UID)\""
+	expectedTime := "\"Event-Time: $(date --rfc-3339=seconds --utc)\""
+	expectedNamespace := "\"Event-Namespace: cronjobtrigger.kubeless.io\""
+	expectedType := "\"Event-Type: application/json\""
+	contentType := "\"Content-Type: application/json\""
 
-	expectedHeaders := fmt.Sprintf("-H %s -H %s -H %s -H %s", expectedId, expectedTime, expectedType, expectedNamespace)
+	expectedHeaders := fmt.Sprintf("-H %s -H %s -H %s -H %s -H %s", expectedId, expectedTime, expectedNamespace, expectedType, contentType)
 	expectedEndpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8080", f1Name, ns)
 	expectedCommand := fmt.Sprintf("curl -Lv %s %s", expectedHeaders, expectedEndpoint)
 
@@ -106,9 +107,8 @@ func TestEnsureCronJob(t *testing.T) {
 	args = runtimeContainer.Args
 	foundCommand = args[0]
 
-	expectedData := "{\"test\":\"foo\"}"
-	expectedHeaders = fmt.Sprintf("-H %s -H %s -H %s -H %s -d %s", expectedId, expectedTime, expectedType, expectedNamespace, expectedData)
-	expectedCommand = fmt.Sprintf("curl -Lv %s %s", expectedHeaders, expectedEndpoint)
+	expectedData := "-d '{\"test\":\"foo\"}'"
+	expectedCommand = fmt.Sprintf("curl -Lv %s %s %s", expectedHeaders, expectedEndpoint, expectedData)
 
 	if !reflect.DeepEqual(foundCommand, expectedCommand) {
 		t.Errorf("Unexpected command %s expexted %s", foundCommand, expectedCommand)

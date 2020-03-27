@@ -51,6 +51,7 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, c
 	schedule := cronjobTriggerObj.Spec.Schedule
 	rawPayload, err := json.Marshal(cronjobTriggerObj.Spec.Payload)
 	payload := string(rawPayload)
+	payloadContentType := "application/json"
 
 	if err != nil {
 		return fmt.Errorf("Found an error during JSON parsing on your payload: %s", err)
@@ -60,17 +61,20 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, c
 	jobName := fmt.Sprintf("trigger-%s", funcObj.ObjectMeta.Name)
 	functionEndpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8080", funcObj.ObjectMeta.Name, funcObj.ObjectMeta.Namespace)
 
-	eventId := "\"event-id: $(POD_UID)\""
-	eventTime := "\"event-time: $(date --rfc-3339=seconds --utc)\""
-	eventType := "\"event-type: application/json\""
-	eventNamespace := "\"event-namespace: cronjobtrigger.kubeless.io\""
-	headersTemplate := "-H %s -H %s -H %s -H %s"
-	headers := fmt.Sprintf(headersTemplate, eventId, eventTime, eventType, eventNamespace)
+	headersTemplate := "-H %s -H %s -H %s -H %s -H %s"
+	eventId := "\"Event-Id: $(POD_UID)\""
+	eventTime := "\"Event-Time: $(date --rfc-3339=seconds --utc)\""
+	eventNamespace := "\"Event-Namespace: cronjobtrigger.kubeless.io\""
+	eventType := fmt.Sprintf("\"Event-Type: %s\"", payloadContentType)
+	contentType := fmt.Sprintf("\"Content-Type: %s\"", payloadContentType)
+	headers := fmt.Sprintf(headersTemplate, eventId, eventTime, eventNamespace, eventType, contentType)
 
-	data := map[bool]string{true: fmt.Sprintf("-d %s ", payload), false: ""}[payload != "null"]
+	commandTemplate := "curl -Lv %s %s"
+	command := fmt.Sprintf(commandTemplate, headers, functionEndpoint)
 
-	commandTemplate := "curl -Lv %s %s%s"
-	command := fmt.Sprintf(commandTemplate, headers, data, functionEndpoint)
+	if payload != "null" {
+		command += fmt.Sprintf(" -d '%s'", payload)
+	}
 
 	job := &batchv1beta1.CronJob{
 		ObjectMeta: metav1.ObjectMeta{
