@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	cronjobTriggerApi "github.com/kubeless/cronjob-trigger/pkg/apis/kubeless/v1beta1"
 	kubelessApi "github.com/kubeless/kubeless/pkg/apis/kubeless/v1beta1"
 
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
@@ -23,6 +24,7 @@ func TestEnsureCronJob(t *testing.T) {
 	}
 	ns := "default"
 	f1Name := "func1"
+	newSchedule := "* * * * *"
 	f1 := &kubelessApi.Function{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      f1Name,
@@ -30,6 +32,11 @@ func TestEnsureCronJob(t *testing.T) {
 		},
 		Spec: kubelessApi.FunctionSpec{
 			Timeout: "120",
+		},
+	}
+	cronjobTriggerObj := &cronjobTriggerApi.CronJobTrigger{
+		Spec: cronjobTriggerApi.CronJobTriggerSpec{
+			Schedule: newSchedule,
 		},
 	}
 	expectedMeta := metav1.ObjectMeta{
@@ -44,7 +51,7 @@ func TestEnsureCronJob(t *testing.T) {
 	pullSecrets := []v1.LocalObjectReference{
 		{Name: "creds"},
 	}
-	err := EnsureCronJob(clientset, f1, "* * * * *", "unzip", or, pullSecrets)
+	err := EnsureCronJob(clientset, f1, cronjobTriggerObj, "unzip", or, pullSecrets)
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err)
 	}
@@ -64,21 +71,49 @@ func TestEnsureCronJob(t *testing.T) {
 	if *cronJob.Spec.JobTemplate.Spec.ActiveDeadlineSeconds != int64(120) {
 		t.Errorf("Unexpected ActiveDeadlineSeconds: %d", *cronJob.Spec.JobTemplate.Spec.ActiveDeadlineSeconds)
 	}
-	expectedCommand := []string{"curl", "-Lv", fmt.Sprintf("http://%s.%s.svc.cluster.local:8080", f1Name, ns)}
+
+	expectedId := "\"Event-Id: $(POD_UID)\""
+	expectedTime := "\"Event-Time: $(date --rfc-3339=seconds --utc)\""
+	expectedNamespace := "\"Event-Namespace: cronjobtrigger.kubeless.io\""
+	expectedType := "\"Event-Type: application/json\""
+	contentType := "\"Content-Type: application/json\""
+
+	expectedHeaders := fmt.Sprintf("-H %s -H %s -H %s -H %s -H %s", expectedId, expectedTime, expectedNamespace, expectedType, contentType)
+	expectedEndpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8080", f1Name, ns)
+	expectedCommand := fmt.Sprintf("curl -Lv %s %s", expectedHeaders, expectedEndpoint)
+
 	runtimeContainer := cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
 	if runtimeContainer.Image != "unzip" {
 		t.Errorf("Unexpected image %s", runtimeContainer.Image)
 	}
 	args := runtimeContainer.Args
 	// skip event headers data (i.e  -H "event-id: cronjob-controller-2018-03-05T05:55:41.990784027Z" etc)
-	foundCommand := []string{args[0], args[1], args[len(args)-1]}
+	foundCommand := args[0]
 	if !reflect.DeepEqual(foundCommand, expectedCommand) {
 		t.Errorf("Unexpected command %s expexted %s", foundCommand, expectedCommand)
 	}
 
-	// It should update the existing cronJob if it is already created
-	newSchedule := "*/10 * * * *"
-	err = EnsureCronJob(clientset, f1, newSchedule, "unzip", or, pullSecrets)
+	newSchedule = "*/10 * * * *"
+	newData := make(map[string]string)
+	newData["test"] = "foo"
+
+	cronjobTriggerObj.Spec.Schedule = newSchedule
+	cronjobTriggerObj.Spec.Payload = newData
+
+	err = EnsureCronJob(clientset, f1, cronjobTriggerObj, "unzip", or, pullSecrets)
+	cronJob, err = clientset.BatchV1beta1().CronJobs(ns).Get(fmt.Sprintf("trigger-%s", f1.Name), metav1.GetOptions{})
+
+	runtimeContainer = cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+	args = runtimeContainer.Args
+	foundCommand = args[0]
+
+	expectedData := "-d '{\"test\":\"foo\"}'"
+	expectedCommand = fmt.Sprintf("curl -Lv %s %s %s", expectedHeaders, expectedEndpoint, expectedData)
+
+	if !reflect.DeepEqual(foundCommand, expectedCommand) {
+		t.Errorf("Unexpected command %s expexted %s", foundCommand, expectedCommand)
+	}
+
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err)
 	}
@@ -95,6 +130,7 @@ func TestAvoidCronjobOverwrite(t *testing.T) {
 	or := []metav1.OwnerReference{}
 	ns := "default"
 	f1Name := "func1"
+	newSchedule := "* * * * *"
 	f1 := &kubelessApi.Function{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      f1Name,
@@ -102,12 +138,18 @@ func TestAvoidCronjobOverwrite(t *testing.T) {
 		},
 		Spec: kubelessApi.FunctionSpec{},
 	}
+	cronjobTriggerObj := &cronjobTriggerApi.CronJobTrigger{
+		Spec: cronjobTriggerApi.CronJobTriggerSpec{
+			Schedule: newSchedule,
+		},
+	}
+
 	clientset := fake.NewSimpleClientset()
 
 	clientset.BatchV1beta1().CronJobs(ns).Create(&batchv1beta1.CronJob{
 		ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("trigger-%s", f1.Name)},
 	})
-	err := EnsureCronJob(clientset, f1, "* * * * *", "unzip", or, []v1.LocalObjectReference{})
+	err := EnsureCronJob(clientset, f1, cronjobTriggerObj, "unzip", or, []v1.LocalObjectReference{})
 	if err == nil && strings.Contains(err.Error(), "conflicting object") {
 		t.Errorf("It should fail because a conflict")
 	}
