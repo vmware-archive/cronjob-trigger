@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/imdario/mergo"
 	cronjobTriggerApi "github.com/kubeless/cronjob-trigger/pkg/apis/kubeless/v1beta1"
 	kubelessApi "github.com/kubeless/kubeless/pkg/apis/kubeless/v1beta1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -72,6 +73,9 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, c
 	commandTemplate := "curl -Lv %s %s"
 	command := fmt.Sprintf(commandTemplate, headers, functionEndpoint)
 
+	mergedLabels := mergeMaps(cronjobTriggerObj.ObjectMeta.Labels, funcObj.ObjectMeta.Labels)
+	mergedAnnotations := mergeMaps(cronjobTriggerObj.ObjectMeta.Annotations, funcObj.ObjectMeta.Annotations)
+
 	if payload != "null" {
 		command += fmt.Sprintf(" -d '%s'", payload)
 	}
@@ -80,7 +84,8 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, c
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            jobName,
 			Namespace:       funcObj.ObjectMeta.Namespace,
-			Labels:          addDefaultLabel(funcObj.ObjectMeta.Labels),
+			Labels:          addDefaultLabel(mergedLabels),
+			Annotations:     mergedAnnotations,
 			OwnerReferences: or,
 		},
 		Spec: batchv1beta1.CronJobSpec{
@@ -91,6 +96,10 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, c
 				Spec: batchv1.JobSpec{
 					ActiveDeadlineSeconds: &activeDeadlineSeconds,
 					Template: v1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels:      addDefaultLabel(mergedLabels),
+							Annotations: mergedAnnotations,
+						},
 						Spec: v1.PodSpec{
 							ImagePullSecrets: reqImagePullSecret,
 							Containers: []v1.Container{
@@ -165,4 +174,13 @@ func hasDefaultLabel(labels map[string]string) bool {
 		return false
 	}
 	return true
+}
+
+func mergeMaps(m1 map[string]string, m2 map[string]string) map[string]string {
+	dest := make(map[string]string)
+
+	mergo.Merge(&dest, m2, mergo.WithOverride)
+	mergo.Merge(&dest, m1, mergo.WithOverride)
+
+	return dest
 }

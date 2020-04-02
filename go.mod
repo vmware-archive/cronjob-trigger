@@ -23,7 +23,7 @@ require (
 	github.com/gregjones/httpcache v0.0.0-20170728041850-787624de3eb7 // indirect
 	github.com/hashicorp/golang-lru v0.0.0-20160207214719-a0d98a5f2880 // indirect
 	github.com/howeyc/gopass v0.0.0-20170109162249-bf9dde6d0d2c // indirect
-	github.com/imdario/mergo v0.0.0-20180119215619-163f41321a19 // indirect
+	github.com/imdario/mergo v0.0.0-20180119215619-163f41321a19
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/json-iterator/go v0.0.0-20170829155851-36b14963da70 // indirect
 	github.com/juju/ratelimit v0.0.0-20170523012141-5b9ff8664717 // indirect
