@@ -136,9 +136,9 @@ func TestEnsureCronJob(t *testing.T) {
 	expectedData := "-d '{\"test\":\"foo\"}'"
 	expectedCommand = fmt.Sprintf("curl -Lv %s %s %s", expectedHeaders, expectedEndpoint, expectedData)
 
-	// if !reflect.DeepEqual(foundCommand, expectedCommand) {
-	// 	t.Errorf("Unexpected command %s expected %s", foundCommand, expectedCommand)
-	// }
+	if !reflect.DeepEqual(foundCommand, expectedCommand) {
+		t.Errorf("Unexpected command %s expected %s", foundCommand, expectedCommand)
+	}
 
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err)
