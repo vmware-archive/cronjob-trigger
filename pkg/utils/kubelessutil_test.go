@@ -29,12 +29,29 @@ func TestEnsureCronJob(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      f1Name,
 			Namespace: ns,
+			Labels: map[string]string{
+				"test":    "true",
+				"only-fn": "ok",
+			},
+			Annotations: map[string]string{
+				"kubeless.io/test":          "test",
+				"kubeless.io/function-only": "this should exist",
+			},
 		},
 		Spec: kubelessApi.FunctionSpec{
 			Timeout: "120",
 		},
 	}
 	cronjobTriggerObj := &cronjobTriggerApi.CronJobTrigger{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{
+				"test": "false",
+			},
+			Annotations: map[string]string{
+				"kubeless.io/test": "not a test",
+				"kubeless.io/new":  "new",
+			},
+		},
 		Spec: cronjobTriggerApi.CronJobTriggerSpec{
 			Schedule: newSchedule,
 		},
@@ -43,7 +60,16 @@ func TestEnsureCronJob(t *testing.T) {
 		Name:            "trigger-" + f1Name,
 		Namespace:       ns,
 		OwnerReferences: or,
-		Labels:          addDefaultLabel(map[string]string{}),
+		Labels: map[string]string{
+			"test":       "false",
+			"only-fn":    "ok",
+			"created-by": "kubeless",
+		},
+		Annotations: map[string]string{
+			"kubeless.io/test":          "not a test",
+			"kubeless.io/function-only": "this should exist",
+			"kubeless.io/new":           "new",
+		},
 	}
 
 	clientset := fake.NewSimpleClientset()
@@ -111,7 +137,7 @@ func TestEnsureCronJob(t *testing.T) {
 	expectedCommand = fmt.Sprintf("curl -Lv %s %s %s", expectedHeaders, expectedEndpoint, expectedData)
 
 	if !reflect.DeepEqual(foundCommand, expectedCommand) {
-		t.Errorf("Unexpected command %s expexted %s", foundCommand, expectedCommand)
+		t.Errorf("Unexpected command %s expected %s", foundCommand, expectedCommand)
 	}
 
 	if err != nil {
@@ -152,5 +178,28 @@ func TestAvoidCronjobOverwrite(t *testing.T) {
 	err := EnsureCronJob(clientset, f1, cronjobTriggerObj, "unzip", or, []v1.LocalObjectReference{})
 	if err == nil && strings.Contains(err.Error(), "conflicting object") {
 		t.Errorf("It should fail because a conflict")
+	}
+}
+
+func TestMergeMaps(t *testing.T) {
+	fnMap := map[string]string{
+		"fnOverwritten": "nok",
+		"fnUntouched":   "ok",
+		"tgUntouched":   "nok",
+	}
+	tgMap := map[string]string{
+		"fnOverwritten": "ok",
+		"tgUntouched":   "ok",
+	}
+	expected := map[string]string{
+		"fnOverwritten": "ok",
+		"fnUntouched":   "ok",
+		"tgUntouched":   "ok",
+	}
+
+	result := mergeMaps(tgMap, fnMap)
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Unexpected merged result: \n Expecting: \n %s \n Received: \n %s", expected, result)
 	}
 }
