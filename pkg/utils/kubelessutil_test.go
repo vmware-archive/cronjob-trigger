@@ -24,6 +24,7 @@ func TestEnsureCronJob(t *testing.T) {
 	}
 	ns := "default"
 	f1Name := "func1"
+	cronjobName := "cron-func1"
 	newSchedule := "* * * * *"
 	f1 := &kubelessApi.Function{
 		ObjectMeta: metav1.ObjectMeta{
@@ -44,6 +45,7 @@ func TestEnsureCronJob(t *testing.T) {
 	}
 	cronjobTriggerObj := &cronjobTriggerApi.CronJobTrigger{
 		ObjectMeta: metav1.ObjectMeta{
+			Name: cronjobName,
 			Labels: map[string]string{
 				"test": "false",
 			},
@@ -57,7 +59,7 @@ func TestEnsureCronJob(t *testing.T) {
 		},
 	}
 	expectedMeta := metav1.ObjectMeta{
-		Name:            "trigger-" + f1Name,
+		Name:            cronjobName,
 		Namespace:       ns,
 		OwnerReferences: or,
 		Labels: map[string]string{
@@ -81,7 +83,7 @@ func TestEnsureCronJob(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err)
 	}
-	cronJob, err := clientset.BatchV1beta1().CronJobs(ns).Get(fmt.Sprintf("trigger-%s", f1.Name), metav1.GetOptions{})
+	cronJob, err := clientset.BatchV1beta1().CronJobs(ns).Get(cronjobName, metav1.GetOptions{})
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err)
 	}
@@ -127,7 +129,7 @@ func TestEnsureCronJob(t *testing.T) {
 	cronjobTriggerObj.Spec.Payload = newData
 
 	err = EnsureCronJob(clientset, f1, cronjobTriggerObj, "unzip", or, pullSecrets)
-	cronJob, err = clientset.BatchV1beta1().CronJobs(ns).Get(fmt.Sprintf("trigger-%s", f1.Name), metav1.GetOptions{})
+	cronJob, err = clientset.BatchV1beta1().CronJobs(ns).Get(cronjobName, metav1.GetOptions{})
 
 	runtimeContainer = cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
 	args = runtimeContainer.Args
@@ -143,7 +145,7 @@ func TestEnsureCronJob(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err)
 	}
-	updatedCronJob, err := clientset.BatchV1beta1().CronJobs(ns).Get(fmt.Sprintf("trigger-%s", f1.Name), metav1.GetOptions{})
+	updatedCronJob, err := clientset.BatchV1beta1().CronJobs(ns).Get(cronjobName, metav1.GetOptions{})
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err)
 	}

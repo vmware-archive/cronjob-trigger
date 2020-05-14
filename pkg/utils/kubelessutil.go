@@ -59,7 +59,7 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, c
 	}
 
 	activeDeadlineSeconds := int64(timeout)
-	jobName := fmt.Sprintf("trigger-%s", funcObj.ObjectMeta.Name)
+	jobName := cronjobTriggerObj.ObjectMeta.Name
 	functionEndpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8080", funcObj.ObjectMeta.Name, funcObj.ObjectMeta.Namespace)
 
 	headersTemplate := "-H %s -H %s -H %s -H %s -H %s"
