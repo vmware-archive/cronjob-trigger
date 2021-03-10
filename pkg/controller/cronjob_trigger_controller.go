@@ -40,7 +40,7 @@ import (
 )
 
 const (
-	cronJobTriggerMaxRetries = 5
+	cronJobTriggerMaxRetries = 11
 	cronJobObjKind           = "Trigger"
 	cronJobAPIVersion        = "kubeless.io/v1beta1"
 	cronJobTriggerFinalizer  = "kubeless.io/cronjobtrigger"
