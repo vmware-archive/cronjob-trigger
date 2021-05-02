@@ -10,8 +10,9 @@ import (
 	kubelessApi "github.com/kubeless/kubeless/pkg/apis/kubeless/v1beta1"
 
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -24,6 +25,7 @@ func TestEnsureCronJob(t *testing.T) {
 	}
 	ns := "default"
 	f1Name := "func1"
+	f2Name := "func2"
 	newSchedule := "* * * * *"
 	f1 := &kubelessApi.Function{
 		ObjectMeta: metav1.ObjectMeta{
@@ -40,6 +42,33 @@ func TestEnsureCronJob(t *testing.T) {
 		},
 		Spec: kubelessApi.FunctionSpec{
 			Timeout: "120",
+		},
+	}
+	f2 := &kubelessApi.Function{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      f2Name,
+			Namespace: ns,
+			Labels: map[string]string{
+				"test":    "true",
+				"only-fn": "ok",
+			},
+			Annotations: map[string]string{
+				"kubeless.io/test":          "test",
+				"kubeless.io/function-only": "this should exist",
+			},
+		},
+		Spec: kubelessApi.FunctionSpec{
+			Timeout: "120",
+			ServiceSpec: v1.ServiceSpec{
+				Ports: []v1.ServicePort{
+					{
+						Name:       "http-function-port",
+						Protocol:   v1.ProtocolTCP,
+						Port:       9090,
+						TargetPort: intstr.FromInt(9090),
+					},
+				},
+			},
 		},
 	}
 	cronjobTriggerObj := &cronjobTriggerApi.CronJobTrigger{
@@ -81,7 +110,15 @@ func TestEnsureCronJob(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err)
 	}
+	err = EnsureCronJob(clientset, f2, cronjobTriggerObj, "unzip", or, pullSecrets)
+	if err != nil {
+		t.Errorf("Unexpected error: %s", err)
+	}
 	cronJob, err := clientset.BatchV1beta1().CronJobs(ns).Get(fmt.Sprintf("trigger-%s", f1.Name), metav1.GetOptions{})
+	if err != nil {
+		t.Errorf("Unexpected error: %s", err)
+	}
+	cronJobCustomPort, err := clientset.BatchV1beta1().CronJobs(ns).Get(fmt.Sprintf("trigger-%s", f2.Name), metav1.GetOptions{})
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err)
 	}
@@ -103,20 +140,33 @@ func TestEnsureCronJob(t *testing.T) {
 	expectedNamespace := "\"Event-Namespace: cronjobtrigger.kubeless.io\""
 	expectedType := "\"Event-Type: application/json\""
 	contentType := "\"Content-Type: application/json\""
+	expectedPortDefault := "8080"
+	expectedPortCustom := "9090"
 
 	expectedHeaders := fmt.Sprintf("-H %s -H %s -H %s -H %s -H %s", expectedId, expectedTime, expectedNamespace, expectedType, contentType)
-	expectedEndpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8080", f1Name, ns)
+	expectedEndpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:%s", f1Name, ns, expectedPortDefault)
+	expectedEndpointCustomPort := fmt.Sprintf("http://%s.%s.svc.cluster.local:%s", f2Name, ns, expectedPortCustom)
 	expectedCommand := fmt.Sprintf("curl -Lv %s %s", expectedHeaders, expectedEndpoint)
+	expectedCommandCustomPort := fmt.Sprintf("curl -Lv %s %s", expectedHeaders, expectedEndpointCustomPort)
 
 	runtimeContainer := cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
 	if runtimeContainer.Image != "unzip" {
 		t.Errorf("Unexpected image %s", runtimeContainer.Image)
 	}
+	runtimeContainerCustomPort := cronJobCustomPort.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+	if runtimeContainer.Image != "unzip" {
+		t.Errorf("Unexpected image %s", runtimeContainer.Image)
+	}
 	args := runtimeContainer.Args
+	argsCustomPort := runtimeContainerCustomPort.Args
 	// skip event headers data (i.e  -H "event-id: cronjob-controller-2018-03-05T05:55:41.990784027Z" etc)
 	foundCommand := args[0]
+	foundCommandCustomPort := argsCustomPort[0]
 	if !reflect.DeepEqual(foundCommand, expectedCommand) {
 		t.Errorf("Unexpected command %s expexted %s", foundCommand, expectedCommand)
+	}
+	if !reflect.DeepEqual(foundCommandCustomPort, expectedCommandCustomPort) {
+		t.Errorf("Unexpected command %s expexted %s", foundCommandCustomPort, expectedCommandCustomPort)
 	}
 
 	newSchedule = "*/10 * * * *"
@@ -130,6 +180,7 @@ func TestEnsureCronJob(t *testing.T) {
 	cronJob, err = clientset.BatchV1beta1().CronJobs(ns).Get(fmt.Sprintf("trigger-%s", f1.Name), metav1.GetOptions{})
 
 	runtimeContainer = cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+	runtimeContainerCustomPort = cronJobCustomPort.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
 	args = runtimeContainer.Args
 	foundCommand = args[0]
 
