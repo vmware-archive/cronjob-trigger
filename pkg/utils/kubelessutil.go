@@ -60,7 +60,12 @@ func EnsureCronJob(client kubernetes.Interface, funcObj *kubelessApi.Function, c
 
 	activeDeadlineSeconds := int64(timeout)
 	jobName := fmt.Sprintf("trigger-%s", funcObj.ObjectMeta.Name)
-	functionEndpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8080", funcObj.ObjectMeta.Name, funcObj.ObjectMeta.Namespace)
+	functionPort := "8080"
+	if len(funcObj.Spec.ServiceSpec.Ports) != 0 {
+		functionPort = strconv.Itoa(int(funcObj.Spec.ServiceSpec.Ports[0].Port))
+	}
+
+	functionEndpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:%s", funcObj.ObjectMeta.Name, funcObj.ObjectMeta.Namespace, functionPort)
 
 	headersTemplate := "-H %s -H %s -H %s -H %s -H %s"
 	eventId := "\"Event-Id: $(POD_UID)\""
