@@ -1,0 +1,58 @@
+name: Cronjob-trigger Onmerge
+on:
+  push:
+    branches:
+      - master
+jobs:
+  test-kubeless:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - run: go mod download
+      - run: make bootstrap
+      - run: make binary
+      - run: make test
+      - run: make validation
+      - name: Store kubeless binary
+        uses: actions/upload-artifact@v2
+        with:
+          name: kubeless
+          path: ~/go/bin/kubeless
+  build-images-onmerge:
+    runs-on: ubuntu-latest
+    env:
+      CRONJOB_CONTROLLER_IMAGE_NAME: ciscom31/cronjob-controller-image
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - run: go mod download
+      - run: make bootstrap
+      - run: |
+          export CONTROLLER_TAG="${GITHUB_REF_NAME}"
+          export CRONJOB_CONTROLLER_IMAGE=${CRONJOB_CONTROLLER_IMAGE_NAME}:${CONTROLLER_TAG}
+          export PATH=$(pwd)/bats/libexec:~/go/bin:/home/runner/work/:$PATH
+          export GOPATH=$(pwd)/go
+          ./script/pull-or-build-image.sh function-controller
+          ./script/pull-or-build-image.sh function-image-builder
+          docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"   
+          images=( 
+            $CRONJOB_CONTROLLER_IMAGE_NAME
+          )
+          for image in "${images[@]}"; do
+            docker push ${image}:${CONTROLLER_TAG}
+            docker tag ${image}:${CONTROLLER_TAG} ${image}:latest
+            docker push ${image}:latest
+          done

@@ -42,7 +42,9 @@ else
 fi
 
 
-GIT_COMMIT=$(git describe --tags --dirty --always)
+# NOTE: upstream uses "git describe --tags --dirty" which doesn't seem to work on github
+#       action builders.
+GIT_COMMIT=$(git rev-parse --short HEAD)
 BUILD_FLAGS=(-ldflags="-w -X github.com/kubeless/cronjob-trigger/pkg/version.Version=${GIT_COMMIT}" -mod=vendor)
 
 # Get rid of existing binaries
